@@ -1,0 +1,169 @@
+CREATE TABLE Retail(InvoiceNo INT,
+			StockCode INT,
+			Description VARCHAR (1000),
+			Quantity INT,
+			InvoiceDate DATE,
+			UnitPrice FLOAT,
+			CustomerID INT,
+			Country VARCHAR (100)
+);
+			 
+
+ALTER TABLE retail
+ALTER COLUMN StockCode TYPE VARCHAR(100),
+ALTER COLUMN invoicedate TYPE VARCHAR(100),
+ALTER COLUMN invoiceno TYPE VARCHAR(100);
+
+SELECT *
+FROM retail;
+
+SELECT COUNT(DISTINCT customerid)
+FROM retail
+
+/* 1. What is the distribution of order values across all customers in the dataset? */
+
+-- to get the ordervalues
+SELECT *
+FROM retail
+
+SELECT
+	customerid,
+	stockcode,
+	description,
+	quantity,
+	unitprice,
+	ROUND(CAST((quantity * unitprice) AS DECIMAL), 2) AS ordervalue 
+FROM
+	retail;
+
+WITH
+	firstcte AS (
+	/* Here I created a new calculated metric called order value by mnultiplying quantity and unitprice*/
+	SELECT
+	customerid,
+	stockcode,
+	description,
+	quantity,
+	unitprice,
+	ROUND(CAST(SUM(quantity * unitprice) AS DECIMAL), 2) AS ordervalue   
+FROM
+	retail
+	GROUP BY customerid,
+	stockcode,
+	description,
+	quantity,
+	unitprice
+HAVING
+	ROUND(CAST(SUM(quantity * unitprice) AS DECIMAL), 2) > 0
+	AND customerid IS NOT NULL
+),
+	
+secondcte AS (
+-- Here I classified order values into 4 classes
+	SELECT
+		*,
+		CASE 
+			WHEN ordervalue BETWEEN 0 AND 500 THEN 'a, 0 - 500'
+			WHEN ordervalue BETWEEN 501 AND 5000 THEN 'b, 501 - 5k'
+			WHEN ordervalue BETWEEN 5000 AND 100000 THEN 'c, 5k - 100k'
+			ELSE 'd - above 100k'
+		END AS orderclass
+	FROM firstcte
+)
+
+SELECT orderclass,
+	COUNT(*)AS orderno
+FROM secondcte
+GROUP BY orderclass
+ORDER BY 1
+
+
+/* 2. How many unique products has each customer purchased? */
+
+WITH 
+	productsold AS (
+	SELECT 
+	COUNT(DISTINCT stockcode) AS unique_product_sold, 
+	customerid
+FROM 
+	retail
+GROUP BY 
+	customerid
+)
+SELECT 
+	*
+FROM 
+	productsold
+GROUP BY
+	customerid, 
+	unique_product_sold
+
+
+	
+/* 3. Which customers have only made a single purchase from the company? */
+
+WITH 
+	purchase AS(
+SELECT 
+    customerid, COUNT(invoiceno) AS purchase_count
+FROM 
+    retail
+GROUP BY 
+    customerid
+HAVING 
+    COUNT(invoiceno) = 1 AND customerid IS NOT NULL
+ORDER BY
+		COUNT(invoiceno) DESC
+)
+SELECT 
+	*
+FROM
+	purchase
+
+
+	
+/* 4. Which products are most commonly purchased together by customers in the
+dataset? */
+
+-- Creating pairs of products within the same purchase
+
+SELECT 
+        a.stockcode AS product1,
+        b.stockcode AS product2
+    FROM 
+        retail a
+    JOIN 
+        retail b 
+    ON 
+        a.invoiceno = b.invoiceno
+    WHERE 
+        a.stockcode < b.stockcode	
+
+-- putting the created product pairs in a CTE
+	
+WITH common_products AS (
+    SELECT 
+        a.stockcode AS product1,
+        b.stockcode AS product2
+    FROM 
+        retail a
+    JOIN 
+        retail b 
+    ON 
+        a.invoiceno = b.invoiceno
+    WHERE 
+        a.stockcode < b.stockcode --to avoid repetition
+)
+
+--  Here, I counted the occurrences of each product pair
+SELECT 
+    product1, 
+    product2, 
+    COUNT(*) AS product_count
+FROM 
+    common_products
+GROUP BY 
+    product1, 
+    product2
+ORDER BY 
+	 product_count DESC;
